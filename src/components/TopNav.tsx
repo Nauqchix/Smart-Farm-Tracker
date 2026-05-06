@@ -2,11 +2,17 @@
 
 import { Leaf, Bell, User, Clock, LogOut } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useNotifications } from "@/lib/notifications";
+
+const NAV_LINKS = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/diagnose", label: "Diagnose" },
+] as const;
 
 export function TopNav() {
   const router = useRouter();
+  const pathname = usePathname();
   const { notifications } = useNotifications();
 
   const [mounted, setMounted] = useState(false);
@@ -84,15 +90,26 @@ export function TopNav() {
           </div>
         </div>
 
-        {/* Nav link — desktop only */}
-        <nav aria-label="Main navigation" className="hidden md:flex">
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="text-sm font-semibold text-emerald-600 px-3 py-2 rounded-lg hover:bg-emerald-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-          >
-            Dashboard
-          </button>
+        {/* Nav links — desktop only */}
+        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-1">
+          {NAV_LINKS.map(({ href, label }) => {
+            const isActive = pathname === href || pathname?.startsWith(href + "/");
+            return (
+              <button
+                key={href}
+                type="button"
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => router.push(href)}
+                className={`text-sm font-semibold px-3 py-2 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  isActive
+                    ? "text-emerald-600 bg-emerald-50"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Right side */}
