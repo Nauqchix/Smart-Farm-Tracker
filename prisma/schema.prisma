@@ -204,3 +204,19 @@ model Notification {
   @@index([isResolved])
   @@index([sensorKey])
 }
+
+// Plant disease AI diagnosis results.
+model PlantDiagnosis {
+  id              Int      @id @default(autoincrement())
+  rawLabel        String
+  label           String
+  disease         String?
+  plant           String
+  confidence      Float
+  status          String   // "healthy" | "diseased" | "uncertain"
+  suggestion      String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+}

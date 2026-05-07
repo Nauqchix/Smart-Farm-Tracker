@@ -1,0 +1,23 @@
+# Plant Disease AI Service Dockerfile (CPU inference)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY plant_disease/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install CPU-only PyTorch (smaller image, no CUDA)
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Copy AI service code and model
+COPY plant_disease/ ./
+
+EXPOSE 8001
+
+CMD ["python", "-m", "uvicorn", "inference_api:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
           '**/firmware/**',
           '**/.next/**',
           '**/gateway/**',
+          '**/plant_disease/**',
         ],
       };
     }

@@ -39,6 +39,18 @@ services:
     networks:
       - mqtt-network
 
+  # Plant Disease AI Service (PyTorch + FastAPI)
+  ai-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+    container_name: yolo-farm-ai
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
   # Next.js Application
   app:
     build: .
@@ -46,11 +58,14 @@ services:
     depends_on:
       mqtt:
         condition: service_healthy
+      ai-service:
+        condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL}
       NODE_ENV: production
       MQTT_BROKER_URL: mqtt://mqtt:1883
       MQTT_MOCK_MODE: "false"
+      PLANT_AI_URL: http://ai-service:8001/predict
     ports:
       - "3000:3000"
     restart: unless-stopped
@@ -64,3 +79,4 @@ volumes:
 networks:
   mqtt-network:
     driver: bridge
+

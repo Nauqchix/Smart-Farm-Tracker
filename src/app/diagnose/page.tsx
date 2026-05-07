@@ -3,11 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
+  HelpCircle,
   Image as ImageIcon,
   Leaf,
   Loader2,
   Plus,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { TopNav } from "@/components/TopNav";
@@ -20,38 +23,31 @@ const ACCEPTED_MIME_TYPES = [
   "image/webp",
 ];
 
-type Severity = "Low" | "Medium" | "High";
-
 type DiagnoseResult = {
-  disease: string;
+  status: "healthy" | "diseased" | "uncertain";
+  disease: string | null;
+  plant: string;
+  label: string;
   confidence: number;
-  severity: Severity;
-  recommendations: string[];
-};
-
-const MOCK_RESULT: DiagnoseResult = {
-  disease: "Leaf Spot Detected",
-  confidence: 87,
-  severity: "Medium",
-  recommendations: [
-    "Remove affected leaves",
-    "Avoid watering directly on leaves",
-    "Improve air circulation",
-    "Monitor plant condition for the next few days",
-  ],
+  suggestion: string;
+  rawLabel: string;
 };
 
 export default function DiagnosePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [result, setResult] = useState<DiagnoseResult | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const handleAnalyzed = (r: DiagnoseResult) => {
+  const handleAnalyzed = (r: DiagnoseResult, preview: string | null) => {
     setResult(r);
+    setPreviewUrl(preview);
     setModalOpen(false);
   };
 
   const handleScanAgain = () => {
     setResult(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
     setModalOpen(true);
   };
 
@@ -93,10 +89,14 @@ export default function DiagnosePage() {
             </button>
           </section>
 
-          {/* Mock result */}
+          {/* Diagnosis result */}
           {result && (
             <section aria-label="Diagnosis result" className="mt-8">
-              <ResultCard result={result} onScanAgain={handleScanAgain} />
+              <ResultCard
+                result={result}
+                imageUrl={previewUrl}
+                onScanAgain={handleScanAgain}
+              />
             </section>
           )}
         </div>
@@ -120,7 +120,7 @@ function UploadModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAnalyzed: (result: DiagnoseResult) => void;
+  onAnalyzed: (result: DiagnoseResult, preview: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -135,7 +135,7 @@ function UploadModal({
     if (!open) {
       setFile(null);
       setPreview((p) => {
-        if (p) URL.revokeObjectURL(p);
+        // Don't revoke — the parent may still use the preview URL for result display
         return null;
       });
       setError(null);
@@ -193,9 +193,31 @@ function UploadModal({
   const handleAnalyze = async () => {
     if (!file || isAnalyzing) return;
     setIsAnalyzing(true);
-    // Simulated analysis delay — replace with real API later
-    await new Promise((r) => setTimeout(r, 1500));
-    onAnalyzed(MOCK_RESULT);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+
+      const response = await fetch("/api/plant-diagnose", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await response.json();
+
+      if (!response.ok) {
+        setError(json.error || json.message || "Diagnosis failed. Please try again.");
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Pass the current preview URL to the parent so it can display the image in the result
+      onAnalyzed(json.data as DiagnoseResult, preview);
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+      setIsAnalyzing(false);
+    }
   };
 
   if (!open) return null;
@@ -335,30 +357,61 @@ function UploadModal({
 
 function ResultCard({
   result,
+  imageUrl,
   onScanAgain,
 }: {
   result: DiagnoseResult;
+  imageUrl: string | null;
   onScanAgain: () => void;
 }) {
-  const severityStyles: Record<Severity, string> = {
-    Low: "bg-emerald-100 text-emerald-700",
-    Medium: "bg-amber-100 text-amber-700",
-    High: "bg-red-100 text-red-700",
+  const statusConfig = {
+    healthy: {
+      icon: ShieldCheck,
+      iconBg: "bg-emerald-50",
+      iconColor: "text-emerald-600",
+      badgeBg: "bg-emerald-100 text-emerald-700",
+      badgeText: "Healthy",
+    },
+    diseased: {
+      icon: AlertTriangle,
+      iconBg: "bg-red-50",
+      iconColor: "text-red-600",
+      badgeBg: "bg-red-100 text-red-700",
+      badgeText: "Disease Detected",
+    },
+    uncertain: {
+      icon: HelpCircle,
+      iconBg: "bg-amber-50",
+      iconColor: "text-amber-600",
+      badgeBg: "bg-amber-100 text-amber-700",
+      badgeText: "Uncertain",
+    },
   };
+
+  const config = statusConfig[result.status] || statusConfig.uncertain;
+  const StatusIcon = config.icon;
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 sm:p-8">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-            <AlertCircle className="w-5 h-5 text-amber-600" aria-hidden="true" />
+          <div
+            className={`w-10 h-10 rounded-xl ${config.iconBg} flex items-center justify-center flex-shrink-0`}
+          >
+            <StatusIcon className={`w-5 h-5 ${config.iconColor}`} aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <h3 className="text-lg font-bold text-slate-900 truncate">
-              {result.disease}
+              {result.status === "healthy"
+                ? `${result.plant} — Healthy`
+                : result.status === "uncertain"
+                  ? "Uncertain Result"
+                  : result.disease || result.label}
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Diagnosis result</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {result.plant} · AI Diagnosis
+            </p>
           </div>
         </div>
         <button
@@ -370,48 +423,86 @@ function ResultCard({
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-            Confidence
-          </p>
-          <p className="text-2xl font-bold text-slate-900 tabular-nums">
-            {result.confidence}%
-          </p>
-        </div>
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-            Severity
-          </p>
-          <span
-            className={`inline-block px-2.5 py-1 rounded-full text-sm font-semibold ${severityStyles[result.severity]}`}
-          >
-            {result.severity}
-          </span>
+      {/* Image preview + Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        {/* Uploaded image */}
+        {imageUrl && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageUrl}
+              alt="Analyzed plant"
+              className="max-h-40 max-w-full rounded-lg object-contain"
+            />
+          </div>
+        )}
+
+        {/* Stats grid */}
+        <div className={`grid gap-3 ${imageUrl ? "grid-cols-1" : "grid-cols-2 sm:col-span-2"}`}>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              Status
+            </p>
+            <span
+              className={`inline-block px-2.5 py-1 rounded-full text-sm font-semibold ${config.badgeBg}`}
+            >
+              {config.badgeText}
+            </span>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              Confidence
+            </p>
+            <p className="text-2xl font-bold text-slate-900 tabular-nums">
+              {result.confidence}%
+            </p>
+          </div>
+          {result.disease && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                Disease
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                {result.disease}
+              </p>
+            </div>
+          )}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              Plant
+            </p>
+            <p className="text-sm font-semibold text-slate-800">
+              {result.plant}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Recommendations */}
-      <div>
-        <h4 className="text-sm font-semibold text-slate-700 mb-3">
-          Recommended actions
-        </h4>
-        <ul className="space-y-2">
-          {result.recommendations.map((rec) => (
-            <li
-              key={rec}
-              className="flex items-start gap-2.5 text-sm text-slate-600"
-            >
-              <CheckCircle2
-                className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0"
-                aria-hidden="true"
-              />
-              <span>{rec}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {/* Suggestion */}
+      {result.suggestion && (
+        <div>
+          <h4 className="text-sm font-semibold text-slate-700 mb-3">
+            {result.status === "healthy"
+              ? "Care Tips"
+              : result.status === "uncertain"
+                ? "Recommendation"
+                : "Treatment & Care"}
+          </h4>
+          <div className="flex items-start gap-2.5 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <CheckCircle2
+              className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                result.status === "healthy"
+                  ? "text-emerald-500"
+                  : result.status === "uncertain"
+                    ? "text-amber-500"
+                    : "text-red-500"
+              }`}
+              aria-hidden="true"
+            />
+            <span className="leading-relaxed">{result.suggestion}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
