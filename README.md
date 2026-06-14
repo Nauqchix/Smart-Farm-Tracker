@@ -11,8 +11,8 @@ which travels back through MQTT to the firmware.
 ## 1. System architecture
 
 ```
-┌──────────┐        MQTT publish         ┌─────────────┐
-│  ESP32   │ ─── yolofarm/sensor/all ──► │  Mosquitto  │
+┌──────────┐        MQTT publish          ┌─────────────┐
+│  ESP32   │ ─── yolofarm/sensor/all ──►  │  Mosquitto  │
 │ firmware │                              │   broker    │
 │          │ ◄── yolofarm/control/heater ─┤   :1883     │
 │          │ ◄── yolofarm/control/buzzer ─┤             │
